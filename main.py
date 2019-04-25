@@ -1,10 +1,11 @@
 from src.file_analyzer import FileAnalyzer
 import sys
 
-file_analyzer = FileAnalyzer(sys.argv[1])
+file_analyzer = FileAnalyzer(sys.argv[1:])
 # file_analyzer.validate_arguments()
 
 #  Write only tags, their attributes and scripts to file
+
 
 
 # HTML file features (or characteristics)
