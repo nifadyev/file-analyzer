@@ -2,33 +2,55 @@
 import requests
 import re
 from bs4 import BeautifulSoup
+import argparse
 
-
+# TODO: count script
+# TODO: count css
+# TODO: выполнить выборку из например 1000 сайтов и файлов, сравнить, мб построить графики
+# Привести общую инфу по форматам и сравнить их харки
 class FileAnalyzer:
-    """ """
+    """Analyze markup files and show their various characteristics."""
 
     _response_body = None
     _markup_information = None
     _useful_information = None
+    _url = False
+    _soup = None
 
-    def __init__(self, uri):
-        self.uri = uri
+    def __init__(self, args):
+        self.arguments = self._parse_arguments(args)
+        self.uri = self.arguments.file_path
+        self._scrape()
+        self.write_response('results/response.html')
+        self.write_markup_information('results/tags.txt')
+        self.write_useful_information('results/useful_info.txt')
         # self.request = requests.get(uri)
 
     def _scrape(self):
-        self._response_body = requests.get(self.uri).text
+        # TODO: decode response (get rid of such shit - &#1055;)
+        self._response_body = requests.get(self.uri, headers={'Content-Type': 'text/html;charset=UTF-8'}).text
 
+        # TODO: add meaning of regular expression
         self._markup_information = re.findall(
-            r'<+/?.*?>+', self._response_body)
+            r'<+/?.*?>+', self._response_body
+        )
 
         #  Write only useful text to file
         soup = BeautifulSoup(self._response_body, "html.parser")
+        self._soup = soup
         # Use this for counting most frequent tag (use Counter)
         # print([tag.name for tag in soup.find_all()])
 
-        # kill all script and style elements
+        # TODO: this is text of script tag, need to count number of chars in it
+        script = soup.find('script')
+        # print(script.text)
+
+        # TODO: this is text of script tag, need to count number of chars in it
+        style = soup.find('style')
+        # print(style.text)
+        # Remove script and style elements
         for script in soup(["script", "style"]):
-            script.extract()    # rip it out
+            script.extract()
 
         # get text
         # text = soup.get_text()
@@ -44,6 +66,51 @@ class FileAnalyzer:
         # drop blank lines
         self._useful_information = '\n'.join(
             chunk for chunk in chunks if chunk)
+
+    def validate_file_path(self, file_path):
+        """ """
+
+        # TODO: regex for check if file_path is valid url
+        # if url:
+        #     _url = True
+        # TODO: or valid path to file
+
+        return file_path
+
+    def _parse_arguments(self, args):
+        """Handle command line arguments using argparse.
+
+        Arguments:
+            args {list} -- command line arguments.
+
+        Raises:
+            argparse.ArgumentTypeError -- invalid argument type.
+
+        Returns:
+            argparse.Namespace -- parsed arguments of valid type.
+        """
+
+        argument_parser = argparse.ArgumentParser(description="Markup file analyzer")
+
+        argument_parser.add_argument(
+            "file_path", help="path to local file or URL", type=self.validate_file_path
+        )
+        # argument_parser.add_argument(
+        #     "-v", "--verbose", help="verbose output about errors",
+        #     action='store_true'
+        # )
+
+        # def raise_value_error(err_msg):
+        #     raise argparse.ArgumentTypeError(err_msg)
+
+        # argument_parser.error = raise_value_error
+
+        # try:
+        #     return argument_parser.parse_args(args)
+        # except BaseException:
+        #     print(sys.exc_info()[1])
+        #     sys.exit()
+        return argument_parser.parse_args(args)
 
     @property
     def markup_information_symbols(self):
@@ -64,7 +131,7 @@ class FileAnalyzer:
     def useful_info_to_markup_info_ratio(self):
         return self.useful_information_symbols / self.markup_information_symbols
 
-    def write_response(self, response, output_file):
+    def write_response(self, output_file):
         """ """
 
         with open(output_file, 'w+', encoding="utf-8") as output:
@@ -73,7 +140,9 @@ class FileAnalyzer:
                 # Only 1 line, need another solution
                 # output.write(line or '')
             # output.write(request.text.replace('\n', ''))
-            output.write(response.replace('\t', '    '))
+            # output.write(self._response_body.replace('\t', '    '))
+            # output.write(self._soup.prettify())
+            output.write(self._soup.prettify().replace('&amp;', '&'))
 
     def write_useful_information(self, output_file_path):
         with open(output_file_path, 'w+', encoding='utf-8') as output:
@@ -94,17 +163,5 @@ class FileAnalyzer:
     #     return self.uri + 'sdfsd'
 
 
-a = FileAnalyzer('http://www.unn.ru/')
-print(a.get_uri)
-
-#  Write only tags, their attributes and scripts to file
-# TODO: add meaming of regular expresion
-
-
-# HTML file features (or characteristics)
-# print('Number of chars (markup information):', tags_and_attributes_chars)
-# # print('Number of tags (markup information):', )
-# print('Number of chars (displayed information):', useful_text_chars)
-# print('Number of words (displayed information):', words_useful_info)
-# print('Displayed information to markup information ratio:',
-#       f'{useful_info_to_markup_info_ratio:.2f}')
+# a = FileAnalyzer('http://www.unn.ru/')
+# print(a.get_uri)
