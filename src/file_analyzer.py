@@ -17,6 +17,8 @@ class FileAnalyzer:
     _response_body = None
     _markup_information = None
     _useful_information = None
+    _script = None
+    _style = None
     _url = False
     _soup = None
 
@@ -31,14 +33,17 @@ class FileAnalyzer:
         # self.request = requests.get(uri)
 
     def _scrape(self):
-        # TODO: decode response (get rid of such shit - &#1055;)
-        # self._response_body = requests.get(
-            # self.uri, headers={'Content-Type': 'text/html;charset=UTF-8'}).text
+        # Very simple check for whether uri is url or path to file
+        if self.uri.endswith('.html') and not self.uri.startswith('http')\
+                and not self.uri.startswith('www'):
 
-        with open(self.uri, 'r') as html:
-            self._response_body = html.read()
+            with open(self.uri, 'r') as html:
+                self._response_body = html.read()
 
-        # print(self._response_body)
+        elif self.uri.startswith('http') and self.uri.startswith('www'):
+            # TODO: decode response (get rid of such shit - &#1055;)
+            self._response_body = requests.get(
+                self.uri, headers={'Content-Type': 'text/html;charset=UTF-8'}).text
 
         # TODO: add meaning of regular expression
         self._markup_information = re.findall(
@@ -53,13 +58,15 @@ class FileAnalyzer:
         # Use this for counting most frequent tag (use Counter)
         # print([tag.name for tag in soup.find_all()])
 
-        # TODO: this is text of script tag, need to count number of chars in it
-        script = soup.find('script')
-        # print(script.text)
+        # quiet straight forward solution, change in future
+        script_with_empty_strings = [line.strip() for line in soup.find('script').text.splitlines() if line]
+        self._script = [line for line in script_with_empty_strings if line]
+        # print(self._script)
 
-        # TODO: this is text of script tag, need to count number of chars in it
-        style = soup.find('style')
-        # print(style.text)
+        # self._style = soup.find('style').text
+        style_with_empty_strings = [line.strip() for line in soup.find('style').text.splitlines() if line]
+        self._style = [line for line in style_with_empty_strings if line]
+        print(self._style)
         # Remove script and style elements
         for script in soup(["script", "style"]):
             script.extract()
@@ -150,6 +157,16 @@ class FileAnalyzer:
         # return length
 
     @property
+    def markup_information_script(self):
+        # Count chars of JS code without tabs
+        return sum(len(line) for line in self._script)
+
+    @property
+    def markup_information_style(self):
+        # Count chars of CSS styles without tabs
+        return sum(len(line) for line in self._style)
+
+    @property
     def useful_information_symbols(self):
         # Remove '\n' from total number of markup symbols
         # Last string doesn't have trailing '\n'
@@ -173,8 +190,8 @@ class FileAnalyzer:
         with open(output_file, 'w+', encoding="utf-8") as output:
             # str_list = list(filter(None, request.text))
             # for line in request.text.split('\n'):
-                # Only 1 line, need another solution
-                # output.write(line or '')
+                    # Only 1 line, need another solution
+                    # output.write(line or '')
             # output.write(request.text.replace('\n', ''))
             # output.write(self._response_body.replace('\t', '    '))
             # output.write(self._soup.prettify())
