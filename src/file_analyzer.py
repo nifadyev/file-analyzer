@@ -26,7 +26,10 @@ class FileAnalyzer:
         # This one are unique to each class entity
         self.arguments = self._parse_arguments(args)
         self.uri = self.arguments.file_path
+        
         self.is_html = False
+        self.is_xml = False
+        self.is_json = False
         # ? Maybe do this that way
         # self.response = None
 
@@ -36,34 +39,75 @@ class FileAnalyzer:
         if self.uri.endswith('.html')\
                 and not self.uri.startswith('http')\
                 and not self.uri.startswith('www'):
+
             self.is_html = True
+            self.is_xml = False
+            self.is_json = False
+
             with open(self.uri, 'r') as html:
                 self._response_body = html.read()
         # ! Fill fail if filename starts with these prefixes
         elif self.uri.startswith('http') or self.uri.startswith('www'):
             # TODO: decode response (get rid of such shit - &#1055;)
+
             self.is_html = True
+            self.is_xml = False
+            self.is_json = False
+
             self._response_body = requests.get(
                 self.uri,
                 headers={'Content-Type': 'text/html;charset=UTF-8'}
             ).text
 
-        if self.uri.endswith('.xml')\
+        elif self.uri.endswith('.xml')\
                 and not self.uri.startswith('http')\
                 and not self.uri.startswith('www'):
+
+            self.is_html = False
+            self.is_xml = True
+            self.is_json = False
+
             with open(self.uri) as xml:
                 self._response_body = xml.read()
         elif self.uri.startswith('http') or self.uri.startswith('www'):
+
+            self.is_html = False
+            self.is_xml = True
+            self.is_json = False
+
             self._response_body = requests.get(
                 self.uri,
                 headers={'Content-Type': 'text/xml;charset=UTF-8'}
             ).text
 
+        elif self.uri.endswith('.json')\
+                and not self.uri.startswith('http')\
+                and not self.uri.startswith('www'):
+
+            self.is_html = False
+            self.is_xml = False
+            self.is_json = True
+
+            with open(self.uri) as json:
+                self._response_body = json.read()
+        elif self.uri.startswith('http') or self.uri.startswith('www'):
+
+            self.is_html = False
+            self.is_xml = False
+            self.is_json = True
+
+            self._response_body = requests.get(
+                self.uri,
+                headers={'Content-Type': 'text/json;charset=UTF-8'}
+            ).text
+
         if self.is_html:
             self._html_scrape()
             self.is_html = False
-        else:
+        elif self.is_xml:
             self._xml_scrape()
+        elif self.is_json:
+            self._json_scrape()
 
         self.write_response('results/response.html')
         self.write_markup_information('results/tags.txt')
@@ -72,7 +116,6 @@ class FileAnalyzer:
 
 
     def _xml_scrape(self):
-        print(self._response_body)
         self._markup_information = re.findall(
             r'<+/?.*?>+',  # TODO: add meaning of regular expression
             self._response_body
@@ -100,14 +143,44 @@ class FileAnalyzer:
         self._useful_information = '\n'.join(
             chunk for chunk in chunks if chunk)
 
+    def _json_scrape(self):
+        print(self._response_body)
+        # ! Doesnt handle such values^ {ip}
+        self._markup_information = re.findall(
+            r'["|:|{|}|\[|\]]',  # TODO: add meaning of regular expression
+            self._response_body
+        )
+        print(self._markup_information)
+
+        #  Write only useful text to file
+        # ! Pronably invalid. Check how to extract info from json
+        # soup = BeautifulSoup(self._response_body, "xml.parser")
+        soup = BeautifulSoup(self._response_body, "html.parser")
+        self._soup = soup
+
+        # get text
+        # text = soup.get_text()
+        # ? Why separator is being used
+        self._useful_information = soup.get_text(separator=' ')
+
+        # break into lines and remove leading and trailing space on each
+        lines = (line.strip()
+                for line in self._useful_information.splitlines())
+        # break multi-headlines into a line each
+        # ? For what
+        chunks = (phrase.strip()
+                for line in lines for phrase in line.split("  "))
+        # drop blank lines
+        self._useful_information = '\n'.join(
+            chunk for chunk in chunks if chunk)
+        print(self._useful_information)
+
     def _html_scrape(self):
         # ! Example of scraping xml tags is presented in regex cheatsheet
         self._markup_information = re.findall(
             r'<+/?.*?>+',  # TODO: add meaning of regular expression
             self._response_body
         )
-
-        # print(self._markup_information)
 
         #  Write only useful text to file
         soup = BeautifulSoup(self._response_body, "html.parser")
