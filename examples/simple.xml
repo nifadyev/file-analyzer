@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<query>
+  <as>AS51037 Infoservice Ltd.</as>
+  <city>Nizhniy Novgorod</city>
+  <country>Russia</country>
+  <countryCode>RU</countryCode>
+  <isp>Infoservice</isp>
+  <lat>56.3287</lat>
+  <lon>44.002</lon>
+  <org></org>
+  <query>178.249.66.98</query>
+  <region>NIZ</region>
+  <regionName>Nizhny Novgorod Oblast</regionName>
+  <status>success</status>
+  <timezone>Europe/Moscow</timezone>
+  <zip>603028</zip>
+</query>
