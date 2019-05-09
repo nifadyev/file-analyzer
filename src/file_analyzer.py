@@ -3,6 +3,7 @@ import re
 import argparse
 import requests
 from bs4 import BeautifulSoup
+import json
 
 # TODO: выполнить выборку из например 1000 сайтов и файлов, сравнить, мб построить графики
 # Привести общую инфу по форматам и сравнить их харки
@@ -143,6 +144,14 @@ class FileAnalyzer:
         self._useful_information = '\n'.join(
             chunk for chunk in chunks if chunk)
 
+    def _get_keys_and_values_json(self, json, destination):
+        for key, value in json.items():
+            destination.append(key)
+            if isinstance(value, dict):
+                self._get_keys_and_values_json(value, destination)
+            else:
+                destination.append(value)
+
     def _json_scrape(self):
         print(self._response_body)
         # ! Doesnt handle such values^ {ip}
@@ -150,29 +159,22 @@ class FileAnalyzer:
             r'["|:|{|}|\[|\]]',  # TODO: add meaning of regular expression
             self._response_body
         )
-        print(self._markup_information)
+        # print(self._markup_information)
+        # def get_keys(dl, keys_list):
+        #     if isinstance(dl, dict):
+        #         keys_list += dl.keys()
+        #         map(lambda x: get_keys(x, keys_list), dl.values())
+        #     elif isinstance(dl, list):
+        #         map(lambda x: get_keys(x, keys_list), dl)
 
-        #  Write only useful text to file
-        # ! Pronably invalid. Check how to extract info from json
-        # soup = BeautifulSoup(self._response_body, "xml.parser")
-        soup = BeautifulSoup(self._response_body, "html.parser")
-        self._soup = soup
+        # keys = []
+        # get_keys(jdata, keys)
+        parsed_json = json.loads(self._response_body)
+        self._useful_information = []
 
-        # get text
-        # text = soup.get_text()
-        # ? Why separator is being used
-        self._useful_information = soup.get_text(separator=' ')
-
-        # break into lines and remove leading and trailing space on each
-        lines = (line.strip()
-                for line in self._useful_information.splitlines())
-        # break multi-headlines into a line each
-        # ? For what
-        chunks = (phrase.strip()
-                for line in lines for phrase in line.split("  "))
-        # drop blank lines
-        self._useful_information = '\n'.join(
-            chunk for chunk in chunks if chunk)
+        self._get_keys_and_values_json(parsed_json, self._useful_information)
+        # self._useful_information.extend(parsed_json.keys())
+        # self._useful_information.extend(parsed_json.values())
         print(self._useful_information)
 
     def _html_scrape(self):
