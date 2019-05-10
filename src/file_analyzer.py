@@ -9,7 +9,7 @@ import json
 # Привести общую инфу по форматам и сравнить их харки
 # !!! TODO: WRITE TESTS USING PYTEST
 # TODO: get rid of too many if else
-
+# TODO: adaptate either functions or parsing useful json info to 1 standard
 
 class FileAnalyzer:
     """Analyze markup files and show their various characteristics."""
@@ -201,7 +201,7 @@ class FileAnalyzer:
             line.strip() for line in soup.find('style').text.splitlines() if line
         ]
         self._style = [line for line in style_with_empty_strings if line]
-        print(self._style)
+        # print(self._style)
         # Remove script and style elements
         for script in soup(["script", "style"]):
             script.extract()
@@ -219,8 +219,9 @@ class FileAnalyzer:
         chunks = (phrase.strip()
                 for line in lines for phrase in line.split("  "))
         # drop blank lines
-        self._useful_information = '\n'.join(
-            chunk for chunk in chunks if chunk)
+        # self._useful_information = '\n'.join(
+        #     chunk for chunk in chunks if chunk)
+        self._useful_information = tuple(line for line in chunks if line)
 
     def validate_file_path(self, file_path):
         """Check file path for validity."""
@@ -299,9 +300,11 @@ class FileAnalyzer:
 
         # Remove '\n' from total number of markup symbols
         # Last string doesn't have trailing '\n'
-        return len(self._useful_information)\
-            - len(self._useful_information.splitlines())\
-            + 1
+        # return len(self._useful_information)\
+        #     - len(self._useful_information.splitlines())\
+        #     + 1
+        return sum(len(line) for line in self._useful_information)
+
 
     @property
     def useful_information_words(self):
@@ -311,8 +314,10 @@ class FileAnalyzer:
 
         # FIXME: dont count words correctly because last word in Title wont count
         # ! Thats why use hardcoded +1 length
-        return len(self._useful_information.split(' '))\
-            + 1
+        # return len(self._useful_information.split(' '))\
+        #     + 1
+        print(self._useful_information)
+        return sum(len(line.split(' ')) for line in self._useful_information)
 
     @property
     def useful_info_to_markup_info_ratio(self):
@@ -326,7 +331,7 @@ class FileAnalyzer:
         Arguments:
             output_file {str} -- path to output file.
         """
-
+        # TODO: may differ for json
         with open(output_file, 'w+', encoding="utf-8") as output:
             # str_list = list(filter(None, request.text))
             # for line in request.text.split('\n'):
@@ -344,7 +349,9 @@ class FileAnalyzer:
             output_file {str} -- path to output file.
         """
         with open(output_file_path, 'w+', encoding='utf-8') as output:
-            output.write(self._useful_information)
+            # output.write(self._useful_information)
+            for line in self._useful_information:
+                output.write(line + '\n')
 
     def write_markup_information(self, output_file_path):
         """Write markup information to file.
