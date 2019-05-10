@@ -1,15 +1,10 @@
 #  -*- coding: utf-8 -*-
 import re
 import argparse
+import json
 import requests
 from bs4 import BeautifulSoup
-import json
 
-# TODO: выполнить выборку из например 1000 сайтов и файлов, сравнить, мб построить графики
-# Привести общую инфу по форматам и сравнить их харки
-# !!! TODO: WRITE TESTS USING PYTEST
-# TODO: get rid of too many if else
-# TODO: adaptate either functions or parsing useful json info to 1 standard
 
 class FileAnalyzer:
     """Analyze markup files and show their various characteristics."""
@@ -26,95 +21,78 @@ class FileAnalyzer:
     def __init__(self, args):
         # This one are unique to each class entity
         self.arguments = self._parse_arguments(args)
-        self.uri = self.arguments.file_path
-        
-        self.is_html = False
-        self.is_xml = False
-        self.is_json = False
+
         # ? Maybe do this that way
         # self.response = None
 
-        # TODO: move this if else to separate function
+        file_format, is_local = self.define_file_format(self.arguments.file_path)
+
+        if is_local:
+            with open(self.arguments.file_path, 'r') as input_file:
+                self._response_body = input_file.read()
+        else:
+            self._response_body = requests.get(
+                self.arguments.file_path,
+                headers={'Content-Type': f'text/{file_format};charset=UTF-8'}
+            ).text
+
+        self._scrape(file_format)
+        self._write(file_format)
+
+    # Might be better to do it classmethod
+    # @classmethod
+    def define_file_format(self, file_path):
+        """ """
         # Very simple check for whether uri is url or path to file
         # ! Will fail if file is in '.htm' format
-        if self.uri.endswith('.html')\
-                and not self.uri.startswith('http')\
-                and not self.uri.startswith('www'):
+        if file_path.endswith('.html')\
+                and not file_path.startswith('http')\
+                and not file_path.startswith('www'):
 
-            self.is_html = True
-            self.is_xml = False
-            self.is_json = False
-
-            with open(self.uri, 'r') as html:
-                self._response_body = html.read()
+            file_format = 'html'
+            is_local = True
         # ! Fill fail if filename starts with these prefixes
-        elif self.uri.startswith('http') or self.uri.startswith('www'):
+        elif file_path.startswith('http') or file_path.startswith('www'):
             # TODO: decode response (get rid of such shit - &#1055;)
 
-            self.is_html = True
-            self.is_xml = False
-            self.is_json = False
+            file_format = 'html'
+            is_local = False
+        elif file_path.endswith('.xml')\
+                and not file_path.startswith('http')\
+                and not file_path.startswith('www'):
 
-            self._response_body = requests.get(
-                self.uri,
-                headers={'Content-Type': 'text/html;charset=UTF-8'}
-            ).text
+            file_format = 'xml'
+            is_local = True
+        elif file_path.startswith('http') or file_path.startswith('www'):
+            file_format = 'html'
+            is_local = False
+        elif file_path.endswith('.json')\
+                and not file_path.startswith('http')\
+                and not file_path.startswith('www'):
 
-        elif self.uri.endswith('.xml')\
-                and not self.uri.startswith('http')\
-                and not self.uri.startswith('www'):
+            file_format = 'json'
+            is_local = True
+        elif file_path.startswith('http') or file_path.startswith('www'):
+            file_format = 'json'
+            is_local = False
 
-            self.is_html = False
-            self.is_xml = True
-            self.is_json = False
+        return file_format, is_local
 
-            with open(self.uri) as xml:
-                self._response_body = xml.read()
-        elif self.uri.startswith('http') or self.uri.startswith('www'):
-
-            self.is_html = False
-            self.is_xml = True
-            self.is_json = False
-
-            self._response_body = requests.get(
-                self.uri,
-                headers={'Content-Type': 'text/xml;charset=UTF-8'}
-            ).text
-
-        elif self.uri.endswith('.json')\
-                and not self.uri.startswith('http')\
-                and not self.uri.startswith('www'):
-
-            self.is_html = False
-            self.is_xml = False
-            self.is_json = True
-
-            with open(self.uri) as json:
-                self._response_body = json.read()
-        elif self.uri.startswith('http') or self.uri.startswith('www'):
-
-            self.is_html = False
-            self.is_xml = False
-            self.is_json = True
-
-            self._response_body = requests.get(
-                self.uri,
-                headers={'Content-Type': 'text/json;charset=UTF-8'}
-            ).text
-
-        if self.is_html:
+    def _scrape(self, file_format):
+        """ """
+        if file_format == 'html':
             self._html_scrape()
-            self.is_html = False
-        elif self.is_xml:
+        elif file_format == 'xml':
             self._xml_scrape()
-        elif self.is_json:
+        elif file_format == 'json':
             self._json_scrape()
 
-        self.write_response('results/response.html')
+    def _write(self, file_format):
+        """ """
+
+        self.write_response(f'results/response.{file_format}')
         self.write_markup_information('results/tags.txt')
         self.write_useful_information('results/useful_info.txt')
-        # self.request = requests.get(uri)
-
 
     def _xml_scrape(self):
         self._markup_information = re.findall(
@@ -134,12 +112,14 @@ class FileAnalyzer:
         self._useful_information = soup.get_text(separator=' ')
 
         # break into lines and remove leading and trailing space on each
-        lines = (line.strip()
-                for line in self._useful_information.splitlines())
+        lines = (
+            line.strip() for line in self._useful_information.splitlines()
+        )
         # break multi-headlines into a line each
         # ? For what
-        chunks = (phrase.strip()
-                for line in lines for phrase in line.split("  "))
+        chunks = (
+            phrase.strip() for line in lines for phrase in line.split("  ")
+        )
         # drop blank lines
         self._useful_information = '\n'.join(
             chunk for chunk in chunks if chunk)
@@ -201,27 +181,30 @@ class FileAnalyzer:
             line.strip() for line in soup.find('style').text.splitlines() if line
         ]
         self._style = [line for line in style_with_empty_strings if line]
-        # print(self._style)
         # Remove script and style elements
-        for script in soup(["script", "style"]):
-            script.extract()
+        for extra in soup(["script", "style"]):
+            extra.extract()
 
-        # get text
-        # text = soup.get_text()
         # ? Why separator is being used
-        self._useful_information = soup.get_text(separator=' ')
+        # self._useful_information = soup.get_text(separator=' ')
 
-        # break into lines and remove leading and trailing space on each
-        lines = (line.strip()
-                for line in self._useful_information.splitlines())
-        # break multi-headlines into a line each
-        # ? For what
-        chunks = (phrase.strip()
-                for line in lines for phrase in line.split("  "))
+        # Break into lines, remove leading and trailing space on each
+        # And get rid of blank lines
+        lines = (
+            line.strip() for line in soup.get_text().splitlines() if line
+        )
+        # Split each line into separate words
+        # ! Should we split by " " or by "  "
+        self._useful_information = tuple(
+            phrase.strip() for line in lines for phrase in line.split()
+        )
         # drop blank lines
         # self._useful_information = '\n'.join(
         #     chunk for chunk in chunks if chunk)
-        self._useful_information = tuple(line for line in chunks if line)
+        # self._useful_information = tuple(line for line in chunks)
+
+        # print(self._markup_information)
+        # print(self._useful_information)
 
     def validate_file_path(self, file_path):
         """Check file path for validity."""
@@ -305,7 +288,6 @@ class FileAnalyzer:
         #     + 1
         return sum(len(line) for line in self._useful_information)
 
-
     @property
     def useful_information_words(self):
         """Count amount of useful (displayed to user) information in words."""
@@ -316,8 +298,8 @@ class FileAnalyzer:
         # ! Thats why use hardcoded +1 length
         # return len(self._useful_information.split(' '))\
         #     + 1
-        print(self._useful_information)
-        return sum(len(line.split(' ')) for line in self._useful_information)
+        # return sum(len(line.split(' ')) for line in self._useful_information)
+        return len(self._useful_information)
 
     @property
     def useful_info_to_markup_info_ratio(self):
@@ -335,8 +317,8 @@ class FileAnalyzer:
         with open(output_file, 'w+', encoding="utf-8") as output:
             # str_list = list(filter(None, request.text))
             # for line in request.text.split('\n'):
-                    # Only 1 line, need another solution
-                    # output.write(line or '')
+                # Only 1 line, need another solution
+                # output.write(line or '')
             # output.write(request.text.replace('\n', ''))
             # output.write(self._response_body.replace('\t', '    '))
             # output.write(self._soup.prettify())
@@ -370,7 +352,3 @@ class FileAnalyzer:
     # @property
     # def get_uri(self):
     #     return self.uri + 'sdfsd'
-
-
-# a = FileAnalyzer('http://www.unn.ru/')
-# print(a.get_uri)
