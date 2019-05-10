@@ -1,3 +1,4 @@
 *.txt
 .vscode
 src/__pycache__
+results
