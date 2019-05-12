@@ -4,7 +4,7 @@ import argparse
 import json
 import requests
 from bs4 import BeautifulSoup
-
+from collections import Counter
 
 class FileAnalyzer:
     """Analyze markup files and show their various characteristics."""
@@ -21,6 +21,7 @@ class FileAnalyzer:
     def __init__(self, args):
         # This one are unique to each class entity
         self.arguments = self._parse_arguments(args)
+        self._most_common_tag = None
 
         # ? Maybe do this that way
         # self.response = None
@@ -33,9 +34,12 @@ class FileAnalyzer:
         else:
             self._response_body = requests.get(
                 self.arguments.file_path,
-                headers={'Content-Type': f'text/{file_format};charset=UTF-8'}
+                headers={
+                    'Content-Type': f'text/{file_format};charset=UTF-8'
+                }
             ).text
 
+        # print(self._response_body)
         self._scrape(file_format)
         self._write(file_format)
 
@@ -91,6 +95,7 @@ class FileAnalyzer:
         """ """
 
         self.write_response(f'results/response.{file_format}')
+        # TODO: write to files with appropriate format
         self.write_markup_information('results/tags.txt')
         self.write_useful_information('results/useful_info.txt')
 
@@ -103,8 +108,14 @@ class FileAnalyzer:
         #  Write only useful text to file
         # ! Pronably invalid. Check how to extract info from xml
         # soup = BeautifulSoup(self._response_body, "xml.parser")
+        # ! Need lxml to parse XML
         soup = BeautifulSoup(self._response_body, "html.parser")
         self._soup = soup
+
+        tags = Counter((tag.name for tag in soup.find_all()))
+        # Get first tuple from most common tags list
+        # And tag name from tuple
+        self._most_common_tag = tags.most_common(1)[0][0]
 
         # get text
         # text = soup.get_text()
@@ -159,28 +170,58 @@ class FileAnalyzer:
 
     def _html_scrape(self):
         # ! Example of scraping xml tags is presented in regex cheatsheet
-        self._markup_information = re.findall(
-            r'<+/?.*?>+',  # TODO: add meaning of regular expression
-            self._response_body
-        )
+        # TODO: Count blank lines to markup information
+        # self._markup_information = re.findall(
+        #     # r'.*<+/?.*?>+',  # TODO: add meaning of regular expression
+        #     # All tags without leading tabs
+        #     r'</?[^>]+>',  # TODO: add meaning of regular expression
+        #     # Opening tags with leading tabs or spaces
+        #     # r'.*<[^/?][^>]+>',
+        #     self._response_body
+        # )
+
+        # self._markup_information = re.findall(
+        #     # ! (?#comment) in regex
+        #     # Opening tags with leading tabs or spaces
+        #     r'.*<[^/?][^>]+>',
+        #     self._response_body
+        # )
+        # self._markup_information.extend(
+        #     re.findall(
+        #         # Closing tags
+        #         r'</[^>]+>',
+        #         self._response_body
+        #     )
+        # )
 
         #  Write only useful text to file
         soup = BeautifulSoup(self._response_body, "html.parser")
         self._soup = soup
-        # Use this for counting most frequent tag (use Counter)
-        # print([tag.name for tag in soup.find_all()])
+        # r = re.compile(r'^(\s*)', re.MULTILINE)
+        # ! TODO: DEAL WITH THIS REGEX SHIT
+        # r = re.compile(r'^(\s{2})', re.MULTILINE)
+        # def prettify_2space(s, encoding=None, formatter="minimal"):
+        #     return r.sub('    ', s.prettify(encoding, formatter))
+        # print(soup.decode(pretty_print=True))
+        # # print(prettify_2space(soup))
+        # self._response_body = prettify_2space(soup)
+        # May be extra brackets not needed
+        # ! Read about it
+        tags = Counter((tag.name for tag in soup.find_all()))
+        # Get first tuple from most common tags list
+        # And tag name from tuple
+        self._most_common_tag = tags.most_common(1)[0][0]
 
         # quiet straight forward solution, change in future
-        script_with_empty_strings = [
-            line.strip() for line in soup.find('script').text.splitlines() if line
-        ]
-        self._script = [line for line in script_with_empty_strings if line]
-        # print(self._script)
+        # ! script tags may be more than one
+        if soup.find('script'):
+            self._script = [line for line in soup.find('script').text.splitlines() if str(line).strip()]
+            # print(self._script)
 
-        style_with_empty_strings = [
-            line.strip() for line in soup.find('style').text.splitlines() if line
-        ]
-        self._style = [line for line in style_with_empty_strings if line]
+        # ! style tags may be more than one
+        if soup.find('style'):
+            self._style = [line for line in soup.find('style').text.splitlines() if str(line).strip()]
+            # print(self._style)
         # Remove script and style elements
         for extra in soup(["script", "style"]):
             extra.extract()
@@ -190,20 +231,28 @@ class FileAnalyzer:
 
         # Break into lines, remove leading and trailing space on each
         # And get rid of blank lines
-        lines = (
+        self._useful_information = tuple(
             line.strip() for line in soup.get_text().splitlines() if line
         )
+        # for line in lines:
+        #     print(line)
         # Split each line into separate words
         # ! Should we split by " " or by "  "
-        self._useful_information = tuple(
-            phrase.strip() for line in lines for phrase in line.split()
-        )
+        # self._useful_information = tuple(
+        #     phrase.strip() for line in lines for phrase in line.split()
+        # )
         # drop blank lines
         # self._useful_information = '\n'.join(
         #     chunk for chunk in chunks if chunk)
         # self._useful_information = tuple(line for line in chunks)
 
-        # print(self._markup_information)
+        # response_body_copy = self._response_body
+        response_body_copy = self._soup.prettify(formatter=None)
+        for line in self._useful_information:
+            response_body_copy = re.sub(line, '', response_body_copy)
+        self._markup_information = response_body_copy
+        print(self._markup_information)
+        # print(response_body_copy)
         # print(self._useful_information)
 
     def validate_file_path(self, file_path):
@@ -262,7 +311,7 @@ class FileAnalyzer:
             # length += len(tag.split().split('='))
 
         # Count both opening and closing tags WITHOUT attributes
-        return len(self._markup_information)
+        return len([line for line in self._markup_information.splitlines() if line.lstrip()])
         # return length
 
     @property
@@ -299,13 +348,25 @@ class FileAnalyzer:
         # return len(self._useful_information.split(' '))\
         #     + 1
         # return sum(len(line.split(' ')) for line in self._useful_information)
-        return len(self._useful_information)
+        # Split each line into separate words
+        # ! Check for empty lines
+        words = tuple(
+            phrase.strip() for line in self._useful_information for phrase in line.split()
+        )
+
+        return len(words)
 
     @property
     def useful_info_to_markup_info_ratio(self):
         """Count ratio of displayed information to markup information."""
 
-        return self.useful_information_symbols / self.markup_information_symbols
+        # return self.useful_information_symbols / self.markup_information_symbols
+        return self.useful_information_symbols / (self.total_symbols_number - self.useful_information_symbols)
+    
+    @property
+    def most_common_tag(self):
+        """ """
+        return self._most_common_tag
 
     def write_response(self, output_file):
         """Write response to file.
@@ -322,7 +383,15 @@ class FileAnalyzer:
             # output.write(request.text.replace('\n', ''))
             # output.write(self._response_body.replace('\t', '    '))
             # output.write(self._soup.prettify())
-            output.write(self._soup.prettify().replace('&amp;', '&'))
+            # output.write(self._soup.prettify().replace('&amp;', '&'))
+            # r = re.compile(r'^(\s*)', re.MULTILINE)
+            # def prettify_2space(s, encoding=None, formatter="minimal"):
+            #     return r.sub(r'\1\1', s.prettify(encoding, formatter))
+        # print(soup.decode(pretty_print=True))
+            # output.writelines(self._response_body)
+            # output.writelines(prettify_2space(self._soup))
+            # output.write(self._response_body)
+            output.write(self._soup.prettify(formatter=None))
 
     def write_useful_information(self, output_file_path):
         """Write us useful information to file.
