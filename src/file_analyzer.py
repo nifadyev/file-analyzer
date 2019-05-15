@@ -116,8 +116,6 @@ class FileAnalyzer:
         # And tag name from tuple
         self._most_common_tag = tags.most_common(1)[0][0]
 
-        # get text
-        # text = soup.get_text()
         # ? Why separator is being used
         self._useful_information = soup.get_text(separator=' ')
 
@@ -143,65 +141,23 @@ class FileAnalyzer:
                 destination.append(value)
 
     def _json_scrape(self):
-        # print(self._response_body)
         # ! Doesnt handle such values^ {ip}
         self._markup_information = re.findall(
             r'["|:|{|}|\[|\]]',  # TODO: add meaning of regular expression
             self._response_body
         )
-        # print(self._markup_information)
-        # def get_keys(dl, keys_list):
-        #     if isinstance(dl, dict):
-        #         keys_list += dl.keys()
-        #         map(lambda x: get_keys(x, keys_list), dl.values())
-        #     elif isinstance(dl, list):
-        #         map(lambda x: get_keys(x, keys_list), dl)
 
-        # keys = []
-        # get_keys(jdata, keys)
         parsed_json = json.loads(self._response_body)
         self._useful_information = []
 
+        # self._get_keys_and_values_json(parsed_json, self._useful_information:=[])
         self._get_keys_and_values_json(parsed_json, self._useful_information)
-        # print(self._useful_information)
 
     def _html_scrape(self):
-        # TODO: Count blank lines to markup information
-        # self._markup_information = re.findall(
-        #     # r'.*<+/?.*?>+',  # TODO: add meaning of regular expression
-        #     # All tags without leading tabs
-        #     r'</?[^>]+>',  # TODO: add meaning of regular expression
-        #     # Opening tags with leading tabs or spaces
-        #     # r'.*<[^/?][^>]+>',
-        #     self._response_body
-        # )
-
-        # self._markup_information = re.findall(
-        #     # ! (?#comment) in regex
-        #     # Opening tags with leading tabs or spaces
-        #     r'.*<[^/?][^>]+>',
-        #     self._response_body
-        # )
-        # self._markup_information.extend(
-        #     re.findall(
-        #         # Closing tags
-        #         r'</[^>]+>',
-        #         self._response_body
-        #     )
-        # )
-
         #  Write only useful text to file
         soup = BeautifulSoup(self._response_body, "html.parser")
         self._soup = soup
-        # r = re.compile(r'^(\s*)', re.MULTILINE)
-        # ! TODO: DEAL WITH THIS REGEX SHIT
-        # r = re.compile(r'^(\s{2})', re.MULTILINE)
-        # def prettify_2space(s, encoding=None, formatter="minimal"):
-        #     return r.sub('    ', s.prettify(encoding, formatter))
-        # print(soup.decode(pretty_print=True))
-        # # print(prettify_2space(soup))
-        # self._response_body = prettify_2space(soup)
-        # May be extra brackets not needed
+
         # ! Read about it
         tags = Counter((tag.name for tag in soup.find_all()))
         # Get first tuple from most common tags list
@@ -210,8 +166,17 @@ class FileAnalyzer:
 
         # quiet straight forward solution, change in future
         # ! script tags may be more than one
-        if soup.find('script'):
-            self._script = [line for line in soup.find('script').text.splitlines() if str(line).strip()]
+        scripts = soup.find_all('script')
+        if scripts:
+            self._script = []
+            for script in scripts:
+                # ! str(line).strip() need to remove empty strings
+                self._script.extend(line + '\n' for line in script.text.splitlines() if str(line).strip())
+                # self._script.extend(line for line in script.text.splitlines() if str(line))
+                self._script[-1] = re.sub('\n', '', self._script[-1])
+            print(self._script)
+        # if soup.find('script'):
+            # self._script = [line for line in soup.find('script').text.splitlines() if str(line).strip()]
             # print(self._script)
 
         # ! style tags may be more than one
@@ -325,7 +290,8 @@ class FileAnalyzer:
         """Count amount of JS code in chars."""
 
         # Also count '\n' symbols
-        return sum(len(line) for line in self._script) + len(self._style) - 1
+        # return sum(len(line) for line in self._script) + len(self._script) - 1
+        return sum(len(line) for line in self._script)
 
     @property
     def markup_information_style(self):
