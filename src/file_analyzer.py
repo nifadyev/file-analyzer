@@ -39,7 +39,7 @@ class FileAnalyzer:
                 }
             ).text
 
-        # print(self._response_body)
+        print(self._response_body)
         self._scrape(file_format)
         self._write(file_format)
 
@@ -95,8 +95,7 @@ class FileAnalyzer:
         """ """
 
         self.write_response(f'results/response.{file_format}')
-        # TODO: write to files with appropriate format
-        self.write_markup_information('results/tags.txt')
+        self.write_markup_information(f'results/tags.{file_format}')
         self.write_useful_information('results/useful_info.txt')
 
     def _xml_scrape(self):
@@ -135,8 +134,8 @@ class FileAnalyzer:
         self._useful_information = '\n'.join(
             chunk for chunk in chunks if chunk)
 
-    def _get_keys_and_values_json(self, json, destination):
-        for key, value in json.items():
+    def _get_keys_and_values_json(self, input_json_file, destination):
+        for key, value in input_json_file.items():
             destination.append(key)
             if isinstance(value, dict):
                 self._get_keys_and_values_json(value, destination)
@@ -144,7 +143,7 @@ class FileAnalyzer:
                 destination.append(value)
 
     def _json_scrape(self):
-        print(self._response_body)
+        # print(self._response_body)
         # ! Doesnt handle such values^ {ip}
         self._markup_information = re.findall(
             r'["|:|{|}|\[|\]]',  # TODO: add meaning of regular expression
@@ -164,12 +163,9 @@ class FileAnalyzer:
         self._useful_information = []
 
         self._get_keys_and_values_json(parsed_json, self._useful_information)
-        # self._useful_information.extend(parsed_json.keys())
-        # self._useful_information.extend(parsed_json.values())
-        print(self._useful_information)
+        # print(self._useful_information)
 
     def _html_scrape(self):
-        # ! Example of scraping xml tags is presented in regex cheatsheet
         # TODO: Count blank lines to markup information
         # self._markup_information = re.findall(
         #     # r'.*<+/?.*?>+',  # TODO: add meaning of regular expression
@@ -246,8 +242,8 @@ class FileAnalyzer:
         #     chunk for chunk in chunks if chunk)
         # self._useful_information = tuple(line for line in chunks)
 
-        # response_body_copy = self._response_body
-        response_body_copy = self._soup.prettify(formatter=None)
+        response_body_copy = self._response_body
+        # response_body_copy = self._soup.prettify(formatter=None)
         for line in self._useful_information:
             response_body_copy = re.sub(line, '', response_body_copy)
         self._markup_information = response_body_copy
@@ -293,10 +289,12 @@ class FileAnalyzer:
 
     @property
     def markup_information_symbols(self):
+        print(self._markup_information)
         return sum((len(line) for line in self._markup_information))
 
     @property
     def markup_information_words(self):
+        # TODO: Rename func to markup_information_tags
         # ? How to count attr values if they are grouped using comma
         # ? Also how to get rid of '=' cause its not wrapped with spaces
 
@@ -311,20 +309,30 @@ class FileAnalyzer:
             # length += len(tag.split().split('='))
 
         # Count both opening and closing tags WITHOUT attributes
-        return len([line for line in self._markup_information.splitlines() if line.lstrip()])
-        # return length
+        # return len([line for line in self._markup_information.splitlines() if line.lstrip()])
+
+        # ! Propably wont find inline tags
+        return len(re.findall(
+                # ! (?#comment) in regex
+                # Opening tags with leading tabs or spaces
+                r'<[^/?][^>]+>',
+                self._response_body
+            )
+        )
 
     @property
     def markup_information_script(self):
-        """Count amount of JS code in chars (without tabs)."""
+        """Count amount of JS code in chars."""
 
-        return sum(len(line) for line in self._script)
+        # Also count '\n' symbols
+        return sum(len(line) for line in self._script) + len(self._style) - 1
 
     @property
     def markup_information_style(self):
         """Count amount of CSS styles in chars."""
 
-        return sum(len(line) for line in self._style)
+        # Also count '\n' symbols
+        return sum(len(line) for line in self._style) + len(self._style) - 1
 
     @property
     def useful_information_symbols(self):
@@ -344,12 +352,8 @@ class FileAnalyzer:
         # TODO: remove this wrapping spaces while scraping
 
         # FIXME: dont count words correctly because last word in Title wont count
-        # ! Thats why use hardcoded +1 length
-        # return len(self._useful_information.split(' '))\
-        #     + 1
-        # return sum(len(line.split(' ')) for line in self._useful_information)
         # Split each line into separate words
-        # ! Check for empty lines
+        # ! Check for empty linesREGEX
         words = tuple(
             phrase.strip() for line in self._useful_information for phrase in line.split()
         )
@@ -362,7 +366,7 @@ class FileAnalyzer:
 
         # return self.useful_information_symbols / self.markup_information_symbols
         return self.useful_information_symbols / (self.total_symbols_number - self.useful_information_symbols)
-    
+
     @property
     def most_common_tag(self):
         """ """
@@ -390,8 +394,8 @@ class FileAnalyzer:
         # print(soup.decode(pretty_print=True))
             # output.writelines(self._response_body)
             # output.writelines(prettify_2space(self._soup))
-            # output.write(self._response_body)
-            output.write(self._soup.prettify(formatter=None))
+            output.write(self._response_body)
+            # output.write(self._soup.prettify(formatter=None))
 
     def write_useful_information(self, output_file_path):
         """Write us useful information to file.
