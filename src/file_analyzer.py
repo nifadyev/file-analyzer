@@ -163,9 +163,8 @@ class FileAnalyzer:
         # Get first tuple from most common tags list
         # And tag name from tuple
         self._most_common_tag = tags.most_common(1)[0][0]
-
+        # TODO: add two or more script and style tags into medium example
         # quiet straight forward solution, change in future
-        # ! script tags may be more than one
         scripts = soup.find_all('script')
         if scripts:
             self._script = []
@@ -174,14 +173,22 @@ class FileAnalyzer:
                 self._script.extend(line + '\n' for line in script.text.splitlines() if str(line).strip())
                 # self._script.extend(line for line in script.text.splitlines() if str(line))
                 self._script[-1] = re.sub('\n', '', self._script[-1])
-            print(self._script)
+            # print(self._script)
         # if soup.find('script'):
             # self._script = [line for line in soup.find('script').text.splitlines() if str(line).strip()]
             # print(self._script)
 
-        # ! style tags may be more than one
-        if soup.find('style'):
-            self._style = [line for line in soup.find('style').text.splitlines() if str(line).strip()]
+        styles = soup.find_all('style')
+        if styles:
+            self._style = []
+            for style in styles:
+                # ! str(line).strip() need to remove empty strings
+                self._style.extend(line + '\n' for line in style.text.splitlines() if str(line).strip())
+                # self._script.extend(line for line in script.text.splitlines() if str(line))
+                self._style[-1] = re.sub('\n', '', self._style[-1])
+            print(self._style)
+        # if soup.find('style'):
+            # self._style = [line for line in soup.find('style').text.splitlines() if str(line).strip()]
             # print(self._style)
         # Remove script and style elements
         for extra in soup(["script", "style"]):
