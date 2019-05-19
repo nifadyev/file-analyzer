@@ -5,6 +5,8 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from collections import Counter
+import os.path
+
 
 class FileAnalyzer:
     """Analyze markup files and show their various characteristics."""
@@ -26,7 +28,8 @@ class FileAnalyzer:
         # ? Maybe do this that way
         # self.response = None
 
-        file_format, is_local = self.define_file_format(self.arguments.file_path)
+        file_format, is_local = self.define_file_format(
+            self.arguments.file_path)
 
         if is_local:
             with open(self.arguments.file_path, 'r') as input_file:
@@ -133,19 +136,44 @@ class FileAnalyzer:
             chunk for chunk in chunks if chunk)
 
     def _get_keys_and_values_json(self, input_json_file, destination):
-        for key, value in input_json_file.items():
-            destination.append(key)
-            if isinstance(value, dict):
-                self._get_keys_and_values_json(value, destination)
-            else:
-                destination.append(value)
+        if isinstance(input_json_file, list):
+            # ! HARDCODE, fix it
+            if input_json_file:
+                if isinstance(input_json_file[0], dict):
+                    for value in input_json_file:
+                        self._get_keys_and_values_json(value, destination)
+                else:
+                    destination.extend(str(value) for value in input_json_file)
+        else:
+            for key, value in input_json_file.items():
+                destination.append(key)
+                if isinstance(value, list):
+                    self._get_keys_and_values_json(value, destination)
+                elif isinstance(value, dict):
+                    self._get_keys_and_values_json(value, destination)
+                else:
+                    destination.append(str(value))
 
     def _json_scrape(self):
         # ! Doesnt handle such values^ {ip}
+        # ! Doesn't count /t and spaces
         self._markup_information = re.findall(
-            r'["|:|{|}|\[|\]]',  # TODO: add meaning of regular expression
+            # TODO: add meaning of regular expression
+            r'(\t{1,}|^\s{4,}|"|:|{|}|\[|\]|\,)',
             self._response_body
         )
+        # ? Why this not worling for space counting
+        # a = re.findall(
+        #     # r'^\s{4,}',
+        #     r'^\s',
+        #     self._response_body
+        # )
+        spaces = 0
+        for char in self._response_body:
+            if char == ' ':
+                spaces += 1
+        self._markup_information.extend(' ' * spaces)
+        # print(self._markup_information)
 
         parsed_json = json.loads(self._response_body)
         self._useful_information = []
@@ -170,9 +198,11 @@ class FileAnalyzer:
             self._script = []
             for script in scripts:
                 # ! str(line).strip() need to remove empty strings
-                self._script.extend(line + '\n' for line in script.text.splitlines() if str(line).strip())
+                self._script.extend(
+                    line + '\n' for line in script.text.splitlines() if str(line).strip())
                 # self._script.extend(line for line in script.text.splitlines() if str(line))
-                self._script[-1] = re.sub('\n', '', self._script[-1])
+                if self._script:
+                    self._script[-1] = re.sub('\n', '', self._script[-1])
             # print(self._script)
         # if soup.find('script'):
             # self._script = [line for line in soup.find('script').text.splitlines() if str(line).strip()]
@@ -183,7 +213,8 @@ class FileAnalyzer:
             self._style = []
             for style in styles:
                 # ! str(line).strip() need to remove empty strings
-                self._style.extend(line + '\n' for line in style.text.splitlines() if str(line).strip())
+                self._style.extend(
+                    line + '\n' for line in style.text.splitlines() if str(line).strip())
                 # self._script.extend(line for line in script.text.splitlines() if str(line))
                 self._style[-1] = re.sub('\n', '', self._style[-1])
             print(self._style)
@@ -217,7 +248,8 @@ class FileAnalyzer:
         response_body_copy = self._response_body
         # response_body_copy = self._soup.prettify(formatter=None)
         for line in self._useful_information:
-            response_body_copy = re.sub(line, '', response_body_copy)
+            # print(line)
+            response_body_copy = re.sub(line, '\1', response_body_copy)
         self._markup_information = response_body_copy
         print(self._markup_information)
         # print(response_body_copy)
@@ -261,27 +293,12 @@ class FileAnalyzer:
 
     @property
     def markup_information_symbols(self):
-        print(self._markup_information)
+        # print(self._markup_information)
         return sum((len(line) for line in self._markup_information))
 
     @property
     def markup_information_words(self):
         # TODO: Rename func to markup_information_tags
-        # ? How to count attr values if they are grouped using comma
-        # ? Also how to get rid of '=' cause its not wrapped with spaces
-
-        # length = 0
-        # for tag in self._markup_information:
-        #     print(tag.split(), len(tag.split()))
-        #     tags_and_attrs = tag.split()
-        #     if len(tags_and_attrs) == 1:
-        #         length += len(tags_and_attrs)
-        #     else:
-        #         length += sum(sum(len(w) for w in word.split('=')) for word in tags_and_attrs)
-            # length += len(tag.split().split('='))
-
-        # Count both opening and closing tags WITHOUT attributes
-        # return len([line for line in self._markup_information.splitlines() if line.lstrip()])
 
         # ! Propably wont find inline tags
         return len(re.findall(
@@ -353,22 +370,7 @@ class FileAnalyzer:
         """
         # TODO: may differ for json
         with open(output_file, 'w+', encoding="utf-8") as output:
-            # str_list = list(filter(None, request.text))
-            # for line in request.text.split('\n'):
-                # Only 1 line, need another solution
-                # output.write(line or '')
-            # output.write(request.text.replace('\n', ''))
-            # output.write(self._response_body.replace('\t', '    '))
-            # output.write(self._soup.prettify())
-            # output.write(self._soup.prettify().replace('&amp;', '&'))
-            # r = re.compile(r'^(\s*)', re.MULTILINE)
-            # def prettify_2space(s, encoding=None, formatter="minimal"):
-            #     return r.sub(r'\1\1', s.prettify(encoding, formatter))
-        # print(soup.decode(pretty_print=True))
-            # output.writelines(self._response_body)
-            # output.writelines(prettify_2space(self._soup))
             output.write(self._response_body)
-            # output.write(self._soup.prettify(formatter=None))
 
     def write_useful_information(self, output_file_path):
         """Write us useful information to file.
@@ -378,7 +380,9 @@ class FileAnalyzer:
         """
         with open(output_file_path, 'w+', encoding='utf-8') as output:
             # output.write(self._useful_information)
+            print(self._useful_information)
             for line in self._useful_information:
+                # output.write(f'{line}\n')
                 output.write(line + '\n')
 
     def write_markup_information(self, output_file_path):
@@ -394,6 +398,48 @@ class FileAnalyzer:
     @property
     def total_symbols_number(self):
         return len(self._response_body)
+
+    def collect_data(self, output_file_path):
+        """ """
+        with open(output_file_path, 'a') as output_file:
+            # output_file.write('Filename\tTotal chars number\t3\t4\t5\t6\n')
+            output_file.write(
+                # f'{output_file_path} '+
+                f'{self.total_symbols_number} '
+                + f'{self.markup_information_symbols} '
+                + f'{self.markup_information_words} '
+                + f'{self.useful_information_symbols} '
+                + f'{self.useful_information_words} '
+                + f'{self.useful_info_to_markup_info_ratio:.2f}\n'
+            )
+        # ! Still invalid
+        # TODO: redo is_exists logic
+        # exists = True
+        # if not os.path.exists(output_file_path):
+        #     with open(output_file_path, 'x') as output_file:
+        #         output_file.write('Filename\tTotal chars number\t3\t4\t5\t6\n')
+        #     exists = False
+
+        # if exists:
+        #     with open(output_file_path, 'w') as output_file:
+        #         output_file.write(
+        #             f'{output_file_path} '+
+        #             f'{self.total_symbols_number} '+
+        #             f'{self.markup_information_symbols} '+
+        #             f'{self.markup_information_words} '+
+        #             f'{self.useful_information_symbols} '+
+        #             f'{self.useful_information_words} '
+        #         )
+        # else:
+        #     with open(output_file_path, 'a') as output_file:
+        #         output_file.write(
+        #             f'{output_file_path} '+
+        #             f'{self.total_symbols_number} '+
+        #             f'{self.markup_information_symbols} '+
+        #             f'{self.markup_information_words} '+
+        #             f'{self.useful_information_symbols} '+
+        #             f'{self.useful_information_words} '
+        #         )
 
     # @property
     # def get_uri(self):
