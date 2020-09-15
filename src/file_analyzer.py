@@ -1,8 +1,9 @@
-#  -*- coding: utf-8 -*-
-import requests
+from collections import Counter
 import re
-from bs4 import BeautifulSoup
 import argparse
+import json
+import requests
+from bs4 import BeautifulSoup
 
 
 class FileAnalyzer:
@@ -11,51 +12,170 @@ class FileAnalyzer:
     _response_body = None
     _markup_information = None
     _useful_information = None
-    _url = False
+    _script = None
+    _style = None
     _soup = None
 
     def __init__(self, args):
         self.arguments = self._parse_arguments(args)
-        self.uri = self.arguments.file_path
-        self._scrape()
-        self.write_response('results/response.html')
-        self.write_markup_information('results/tags.txt')
+        self._most_common_tag = None
+
+        file_format, is_local = self.define_file_format(self.arguments.file_path)
+
+        if is_local:
+            with open(self.arguments.file_path, 'r') as input_file:
+                self._response_body = input_file.read()
+        else:
+            self._response_body = requests.get(
+                self.arguments.file_path,
+                headers={
+                    'Content-Type': f'text/{file_format};charset=UTF-8'
+                }
+            ).text
+
+        self._scrape(file_format)
+        self._write(file_format)
+
+    @staticmethod
+    def define_file_format(file_path):
+        """Return file format and flag if file is local."""
+        # Very simple check for whether uri is url or path to file
+        if (
+                file_path.endswith('.html')
+                and not file_path.startswith('http')
+                and not file_path.startswith('www')
+        ):
+            file_format = 'html'
+            is_local = True
+
+        elif file_path.startswith('http') or file_path.startswith('www'):
+            file_format = 'html'
+            is_local = False
+        elif (
+                file_path.endswith('.xml')
+                and not file_path.startswith('http')
+                and not file_path.startswith('www')
+        ):
+            file_format = 'xml'
+            is_local = True
+        elif file_path.startswith('http') or file_path.startswith('www'):
+            file_format = 'html'
+            is_local = False
+        elif (
+                file_path.endswith('.json')
+                and not file_path.startswith('http')
+                and not file_path.startswith('www')
+        ):
+            file_format = 'json'
+            is_local = True
+        elif file_path.startswith('http') or file_path.startswith('www'):
+            file_format = 'json'
+            is_local = False
+
+        return file_format, is_local
+
+    def _scrape(self, file_format):
+        if file_format == 'html':
+            self._html_scrape()
+        elif file_format == 'xml':
+            self._xml_scrape()
+        elif file_format == 'json':
+            self._json_scrape()
+
+    def _write(self, file_format):
+        self.write_response(f'results/response.{file_format}')
+        self.write_markup_information(f'results/tags.{file_format}')
         self.write_useful_information('results/useful_info.txt')
 
-    def _scrape(self):
-        self._response_body = requests.get(
-            self.uri, headers={'Content-Type': 'text/html;charset=UTF-8'}).text
-
-        self._markup_information = re.findall(
-            r'<+/?.*?>+', self._response_body
-        )
-
-        #  Write only useful text to file
-        soup = BeautifulSoup(self._response_body, "html.parser")
+    def _xml_scrape(self):
+        self._markup_information = re.findall(r'<+/?.*?>+', self._response_body)
+        soup = BeautifulSoup(self._response_body, 'html.parser')
         self._soup = soup
 
-        # Remove script and style elements
-        for script in soup(["script", "style"]):
-            script.extract()
-
+        tags = Counter((tag.name for tag in soup.find_all()))
+        # Get first tuple from most common tags list and tag name from tuple
+        self._most_common_tag = tags.most_common(1)[0][0]
         self._useful_information = soup.get_text(separator=' ')
 
-        # Break into lines and remove leading and trailing space on each
-        lines = (line.strip()
-                 for line in self._useful_information.splitlines())
-        # Break multi-headlines into a line each
-        chunks = (phrase.strip()
-                  for line in lines for phrase in line.split("  "))
-        # Drop blank lines
-        self._useful_information = '\n'.join(
-            chunk for chunk in chunks if chunk)
+        lines = (line.strip() for line in self._useful_information.splitlines())
 
-    def validate_file_path(self, file_path):
-        """ """
+        chunks = (phrase.strip() for line in lines for phrase in line.split('  '))
+        # drop blank lines
+        self._useful_information = '\n'.join(chunk for chunk in chunks if chunk)
 
-        return file_path
+    def _get_keys_and_values_json(self, input_json_file, destination):
+        if isinstance(input_json_file, list):
+            if input_json_file:
+                if isinstance(input_json_file[0], dict):
+                    for value in input_json_file:
+                        self._get_keys_and_values_json(value, destination)
+                else:
+                    destination.extend(str(value) for value in input_json_file)
+        else:
+            for key, value in input_json_file.items():
+                destination.append(key)
+                if isinstance(value, list):
+                    self._get_keys_and_values_json(value, destination)
+                elif isinstance(value, dict):
+                    self._get_keys_and_values_json(value, destination)
+                else:
+                    destination.append(str(value))
 
-    def _parse_arguments(self, args):
+    def _json_scrape(self):
+        self._markup_information = re.findall(
+            r'(\t{1,}|^\s{4,}|"|:|{|}|\[|\]|\,)', self._response_body)
+
+        spaces = 0
+        for char in self._response_body:
+            if char == ' ':
+                spaces += 1
+        self._markup_information.extend(' ' * spaces)
+
+        parsed_json = json.loads(self._response_body)
+        self._useful_information = []
+
+        self._get_keys_and_values_json(parsed_json, self._useful_information)
+
+    def _html_scrape(self):
+        soup = BeautifulSoup(self._response_body, 'html.parser')
+        self._soup = soup
+
+        tags = Counter((tag.name for tag in soup.find_all()))
+        # Get first tuple from most common tags list and tag name from tuple
+        self._most_common_tag = tags.most_common(1)[0][0]
+
+        scripts = soup.find_all('script')
+        if scripts:
+            self._script = []
+            for script in scripts:
+                self._script.extend(
+                    line + '\n' for line in script.text.splitlines() if str(line).strip())
+                if self._script:
+                    self._script[-1] = re.sub('\n', '', self._script[-1])
+
+        styles = soup.find_all('style')
+        if styles:
+            self._style = []
+            for style in styles:
+                self._style.extend(
+                    line + '\n' for line in style.text.splitlines() if str(line).strip())
+
+        for extra in soup(['script', 'style']):
+            extra.extract()
+
+        # Break into lines, remove leading and trailing space on each
+        # And get rid of blank lines
+        self._useful_information = tuple(
+            line.strip() for line in soup.get_text().splitlines() if line
+        )
+
+        response_body_copy = self._response_body
+        for line in self._useful_information:
+            response_body_copy = re.sub(line, '\1', response_body_copy)
+        self._markup_information = response_body_copy
+
+    @staticmethod
+    def _parse_arguments(args):
         """Handle command line arguments using argparse.
 
         Arguments:
@@ -67,13 +187,9 @@ class FileAnalyzer:
         Returns:
             argparse.Namespace -- parsed arguments of valid type.
         """
+        argument_parser = argparse.ArgumentParser(description='Markup file analyzer')
 
-        argument_parser = argparse.ArgumentParser(
-            description="Markup file analyzer")
-
-        argument_parser.add_argument(
-            "file_path", help="path to local file or URL", type=self.validate_file_path
-        )
+        argument_parser.add_argument('file_path', help='path to local file or URL')
 
         return argument_parser.parse_args(args)
 
@@ -82,31 +198,84 @@ class FileAnalyzer:
         return sum((len(line) for line in self._markup_information))
 
     @property
+    def markup_information_words(self):
+        return len(re.findall(r'<[^/?][^>]+>', self._response_body))
+
+    @property
+    def markup_information_script(self):
+        """Count amount of JS code in chars."""
+        return sum(len(line) for line in self._script)
+
+    @property
+    def markup_information_style(self):
+        """Count amount of CSS styles in chars."""
+        return sum(len(line) for line in self._style) + len(self._style) - 1
+
+    @property
     def useful_information_symbols(self):
-        return sum((len(line) for line in self._useful_information))
+        """Count amount of useful (displayed to user) information in chars."""
+        return sum(len(line) for line in self._useful_information)
 
     @property
     def useful_information_words(self):
-        return len(self._useful_information.split(' '))
+        """Count amount of useful (displayed to user) information in words."""
+        words = tuple(
+            phrase.strip() for line in self._useful_information for phrase in line.split())
+
+        return len(words)
 
     @property
     def useful_info_to_markup_info_ratio(self):
-        return self.useful_information_symbols / self.markup_information_symbols
+        """Count ratio of displayed information to markup information."""
+        return (
+            self.useful_information_symbols
+            / (self.total_symbols_number - self.useful_information_symbols)
+        )
+
+    @property
+    def most_common_tag(self):
+        return self._most_common_tag
 
     def write_response(self, output_file):
-        """ """
+        """Write response to file.
 
+        Arguments:
+            output_file {str} -- path to output file.
+        """
         with open(output_file, 'w+', encoding="utf-8") as output:
-            output.write(self._soup.prettify().replace('&amp;', '&'))
+            output.write(self._response_body)
 
     def write_useful_information(self, output_file_path):
+        """Write us useful information to file.
+
+        Arguments:
+            output_file {str} -- path to output file.
+        """
         with open(output_file_path, 'w+', encoding='utf-8') as output:
-            output.write(self._useful_information)
+            for line in self._useful_information:
+                output.write(line + '\n')
 
     def write_markup_information(self, output_file_path):
+        """Write markup information to file.
+
+        Arguments:
+            output_file {str} -- path to output file.
+        """
         with open(output_file_path, 'w+') as output:
             for string in self._markup_information:
                 output.write(string+'\n')
 
-    def get_total_symbols_amount(self):
-        return sum((len(line) for line in self.request.text))
+    @property
+    def total_symbols_number(self):
+        return len(self._response_body)
+
+    def collect_data(self, output_file_path):
+        with open(output_file_path, 'a') as output_file:
+            output_file.write(
+                f'{self.total_symbols_number} '
+                + f'{self.markup_information_symbols} '
+                + f'{self.markup_information_words} '
+                + f'{self.useful_information_symbols} '
+                + f'{self.useful_information_words} '
+                + f'{self.useful_info_to_markup_info_ratio:.2f}\n'
+            )
