@@ -1,7 +1,0 @@
-{
-    "query": {
-        "status": "fail",
-        "message": "invalid query",
-        "query": "{ip}"
-    }
-}
